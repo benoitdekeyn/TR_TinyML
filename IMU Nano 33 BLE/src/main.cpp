@@ -20,9 +20,11 @@ void loop() {
     IMU.readAcceleration(x, y, z);
 
     // Permutation pour aligner le capteur Bosch sur la sérigraphie du PCB :
-    float temp = x;
-    float x = y;
-    float y = temp;
+    float temp_x = x;
+    x = y;
+    y = temp_x;
+    z = -z;
+  
 
     // Transmission propre au format CSV
     Serial.print(x, 2);

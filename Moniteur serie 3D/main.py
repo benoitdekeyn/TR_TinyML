@@ -4,8 +4,8 @@ from vpython import rate
 
 # --- CONSTANTES GLOBALES ---
 PORT_SERIE = 'COM6'
-WINDOW_TITLE = "Visualisation Temps Réel Nano 33 BLE"
-FPS_LIMIT = 60
+WINDOW_TITLE = "Projet TinyML - Détection de Chute"
+FPS_LIMIT = 60              
 
 def main():
     lecteur = IMUSerialReader(port=PORT_SERIE)
@@ -13,8 +13,7 @@ def main():
 
     lecteur.start()
     print(f"[*] Visualisation lancée à {FPS_LIMIT} FPS...")
-    print("[*] Commandes : Clic droit = Orbiter | Shift+Clic gauche = Déplacer | Molette = Zoomer")
-
+    
     try:
         while True:
             rate(FPS_LIMIT)
