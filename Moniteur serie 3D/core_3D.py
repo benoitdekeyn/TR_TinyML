@@ -1,14 +1,18 @@
 from vpython import canvas, arrow, vector, color, curve, label, box, menu, cross, mag, acos
+# --- CONSTANTES CSS ---
+FONT_SIZE = 25
 
 # --- CONSTANTES DE FENÊTRE & STYLE CAO ---
-WINDOW_WIDTH = 1920
-WINDOW_HEIGHT = 1080
+WINDOW_WIDTH = 2000
+WINDOW_HEIGHT = 1000
 BG_COLOR = color.white
 
 # --- CONTRÔLES CAO / CAMÉRA ---
 USER_ZOOM = True      
 USER_SPIN = True      
-USER_PAN = True       
+USER_PAN = True      
+DEFAULT_ZOOM = 3.5 
+DEFAULT_ORIENTATION = vector(-1, -1, -0.6)
 
 # --- CONSTANTES DES AXES DE RÉFÉRENCE DU MONDE ---
 AXIS_LENGTH = 2.0
@@ -35,17 +39,13 @@ BOARD_THICK = 0.08
 USB_WIDTH = 0.30      
 USB_LENGTH = 0.25     
 USB_HEIGHT = 0.12     
-MINI_AXIS_LEN = 0.45  # Longueur des flèches du mini-repère
+MINI_AXIS_LEN = 0.45  
 
 
 class IMUVisualizer3D:
     def __init__(self, titre="Détection de Chute - Visualiseur 3D"):
+        # 1. Création du canevas sans titre complexe pour éviter le crash WebGL
         self.scene = canvas(
-            title=f"<h3>{titre}</h3>"
-                  "<p style='color:#555;font-size:12px;margin:0;'>"
-                  "• <b>Orbite :</b> Clic droit + glisser<br>"
-                  "• <b>Déplacer (Pan) :</b> Shift + Clic gauche + glisser<br>"
-                  "• <b>Zoom :</b> Molette souris</p>",
             width=WINDOW_WIDTH,
             height=WINDOW_HEIGHT,
             background=BG_COLOR
@@ -55,32 +55,44 @@ class IMUVisualizer3D:
         self.scene.userpan = USER_PAN
         self.scene.autoscale = False
 
+        # --- RECADRAGE DE LA CAMÉRA ---
         self.scene.up = vector(0, 0, 1)
-        self.scene.forward = vector(-1, -1, -0.6)
+        self.scene.forward = DEFAULT_ORIENTATION
+        self.scene.range = DEFAULT_ZOOM
 
-        # Mode actif par défaut : Objet
         self.mode = 'objet'
 
-        # Menu déroulant (Objet placé en premier)
-        self.scene.append_to_caption('\n<b>Mode d\'affichage : </b>')
-        menu(choices=['Objet (Gravité fixe)', 'Vecteur (IMU fixe)'], bind=self._on_mode_change)
-        self.scene.append_to_caption('\n\n')
+        # 2. Injection sécurisée du HTML et CSS a posteriori
+        self.scene.append_to_title(
+            f"<style> select {{ font-size: {FONT_SIZE}px; padding: 5px; cursor: pointer; }} </style>"
+            f"<h2 style='font-size: {FONT_SIZE + 8}px; margin-bottom: 5px; font-family: sans-serif;'>{titre}</h2>"
+            f"<p style='color:#555; font-size: {FONT_SIZE}px; margin: 0 0 15px 0; font-family: sans-serif;'>"
+            f"• <b>Orbite :</b> Clic droit + glisser<br>"
+            f"• <b>Déplacer (Pan) :</b> Shift + Clic gauche + glisser<br>"
+            f"• <b>Zoom :</b> Molette souris</p>"
+        )
+
+        self.scene.append_to_title('<span style="font-size: 20px; font-family: sans-serif;"><b>Mode d\'affichage : </b></span>')
+        menu(
+            choices=['Objet (Gravité fixe)', 'Vecteur (IMU fixe)'],
+            bind=self._on_mode_change,
+            pos=self.scene.title_anchor
+        )
+        self.scene.append_to_title('<br><br>')
 
         self._draw_grid()
 
-        # Repère du monde fixe (masqué par défaut en mode objet)
         self.axe_x = arrow(pos=ORIGIN, axis=vector(AXIS_LENGTH, 0, 0), color=COLOR_X, shaftwidth=AXIS_WIDTH, visible=False)
         self.axe_y = arrow(pos=ORIGIN, axis=vector(0, AXIS_LENGTH, 0), color=COLOR_Y, shaftwidth=AXIS_WIDTH, visible=False)
         self.axe_z = arrow(pos=ORIGIN, axis=vector(0, 0, AXIS_LENGTH), color=COLOR_Z, shaftwidth=AXIS_WIDTH, visible=False)
 
-        self.lbl_x = label(pos=vector(AXIS_LENGTH + 0.1, 0, 0), text='X', box=False, color=COLOR_X, opacity=0, visible=False)
-        self.lbl_y = label(pos=vector(0, AXIS_LENGTH + 0.1, 0), text='Y (USB)', box=False, color=COLOR_Y, opacity=0, visible=False)
-        self.lbl_z = label(pos=vector(0, 0, AXIS_LENGTH + 0.1), text='Z', box=False, color=COLOR_Z, opacity=0, visible=False)
+        # Taille du texte (height) augmentée à 22
+        self.lbl_x = label(pos=vector(AXIS_LENGTH + 0.1, 0, 0), text='X', box=False, height=22, color=COLOR_X, opacity=0, visible=False)
+        self.lbl_y = label(pos=vector(0, AXIS_LENGTH + 0.1, 0), text='Y (USB)', box=False, height=22, color=COLOR_Y, opacity=0, visible=False)
+        self.lbl_z = label(pos=vector(0, 0, AXIS_LENGTH + 0.1), text='Z', box=False, height=22, color=COLOR_Z, opacity=0, visible=False)
 
-        # Flèche d'accélération pour le mode Vecteur
         self.accel_arrow = arrow(pos=ORIGIN, axis=DEFAULT_DIR, color=COLOR_ACCEL, shaftwidth=ACCEL_WIDTH, visible=False)
 
-        # --- OBJETS DU MODE OBJET (VISIBLES PAR DÉFAUT) ---
         self.pcb = box(
             pos=ORIGIN,
             length=BOARD_LENGTH,
@@ -98,17 +110,14 @@ class IMUVisualizer3D:
             visible=True
         )
 
-        # Mini-repère attaché sur la face supérieure du PCB
         self.mini_x = arrow(pos=ORIGIN, axis=vector(MINI_AXIS_LEN, 0, 0), color=COLOR_X, shaftwidth=0.015, visible=True)
         self.mini_y = arrow(pos=ORIGIN, axis=vector(0, MINI_AXIS_LEN, 0), color=COLOR_Y, shaftwidth=0.015, visible=True)
         self.mini_z = arrow(pos=ORIGIN, axis=vector(0, 0, MINI_AXIS_LEN), color=COLOR_Z, shaftwidth=0.015, visible=True)
 
-        # Noms des axes du mini-repère
-        self.mini_lbl_x = label(pos=ORIGIN, text='X', box=False, height=11, color=COLOR_X, opacity=0, visible=True)
-        self.mini_lbl_y = label(pos=ORIGIN, text='Y', box=False, height=11, color=COLOR_Y, opacity=0, visible=True)
-        self.mini_lbl_z = label(pos=ORIGIN, text='Z', box=False, height=11, color=COLOR_Z, opacity=0, visible=True)
+        self.mini_lbl_x = label(pos=ORIGIN, text='X', box=False, height=22, color=COLOR_X, opacity=0, visible=True)
+        self.mini_lbl_y = label(pos=ORIGIN, text='Y', box=False, height=22, color=COLOR_Y, opacity=0, visible=True)
+        self.mini_lbl_z = label(pos=ORIGIN, text='Z', box=False, height=22, color=COLOR_Z, opacity=0, visible=True)
 
-        # Flèche de gravité fixe pointant vers -Z
         self.gravity_arrow = arrow(pos=ORIGIN, axis=vector(0, 0, -1.5), color=color.cyan, shaftwidth=ACCEL_WIDTH, visible=True)
 
     def _draw_grid(self):
@@ -166,11 +175,9 @@ class IMUVisualizer3D:
                 y_world = y_world.rotate(angle=angle_rot, axis=axe_rot)
                 z_world = z_world.rotate(angle=angle_rot, axis=axe_rot)
 
-            # Orientation de la carte
             self.pcb.axis = y_world * BOARD_LENGTH
             self.pcb.up = z_world
 
-            # Positionnement du port USB sur le bord supérieur (+Y)
             offset_y = (BOARD_LENGTH / 2) - (USB_LENGTH / 2)
             offset_z = (BOARD_THICK / 2) + (USB_HEIGHT / 2)
             usb_offset = y_world * offset_y + z_world * offset_z
@@ -179,7 +186,6 @@ class IMUVisualizer3D:
             self.usb.axis = y_world * USB_LENGTH
             self.usb.up = z_world
 
-            # Origine du mini-repère (centre de la face supérieure du PCB)
             top_center = self.pcb.pos + z_world * (BOARD_THICK / 2)
 
             self.mini_x.pos = top_center
@@ -191,7 +197,6 @@ class IMUVisualizer3D:
             self.mini_z.pos = top_center
             self.mini_z.axis = z_world * MINI_AXIS_LEN
 
-            # Positionnement des labels au bout de chaque flèche respective
             self.mini_lbl_x.pos = top_center + x_world * (MINI_AXIS_LEN + 0.08)
             self.mini_lbl_y.pos = top_center + y_world * (MINI_AXIS_LEN + 0.08)
             self.mini_lbl_z.pos = top_center + z_world * (MINI_AXIS_LEN + 0.08)
