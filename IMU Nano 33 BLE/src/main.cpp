@@ -6,7 +6,11 @@
 void setup() {
   Serial.begin(115200);
   while (!Serial);
-  IMU.begin();
+
+  if (!IMU.begin()) {
+    Serial.println("Erreur : IMU non detectee !");
+    while (1);
+  }
 }
 
 void loop() {
@@ -15,8 +19,13 @@ void loop() {
   if (IMU.accelerationAvailable()) {
     IMU.readAcceleration(x, y, z);
 
-    // Format propre : "X,Y,Z"
-    Serial.print(x, 2); 
+    // Permutation pour aligner le capteur Bosch sur la sérigraphie du PCB :
+    float temp = x;
+    float x = y;
+    float y = temp;
+
+    // Transmission propre au format CSV
+    Serial.print(x, 2);
     Serial.print(",");
     Serial.print(y, 2);
     Serial.print(",");
