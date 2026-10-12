@@ -1,11 +1,12 @@
-from core_IMU import IMUSerialReader
-from core_3D import IMUVisualizer3D
-from vpython import rate
+from vpython import color, rate, vector
 
 # --- CONSTANTES GLOBALES ---
 PORT_SERIE = 'COM6'
 WINDOW_TITLE = "Projet TinyML - Détection de Chute"
-FPS_LIMIT = 60              
+FPS_LIMIT = 60 
+
+from core_IMU import IMUSerialReader
+from core_3D import IMUVisualizer3D
 
 def main():
     lecteur = IMUSerialReader(port=PORT_SERIE)

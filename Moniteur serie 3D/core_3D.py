@@ -1,35 +1,34 @@
 from vpython import canvas, arrow, vector, color, curve, label, box, menu, cross, mag, acos
-# --- CONSTANTES CSS ---
-FONT_SIZE = 25
 
-# --- CONSTANTES DE FENÊTRE & STYLE CAO ---
-WINDOW_WIDTH = 2000
-WINDOW_HEIGHT = 1000
-BG_COLOR = color.white
+# --- CONSTANTES RAPIDES ---
+WINDOW_WIDTH = 1400
+WINDOW_HEIGHT = 1200
+FONT_SIZE = 25
+DEFAULT_ZOOM = 2.5
+BG_COLOR = color.gray(0.1)
+COLOR_X = color.yellow
+COLOR_Y = color.magenta
+COLOR_Z = color.cyan   
+COLOR_GRAVITY = color.white 
+COLOR_GRID = vector(0.3, 0.3, 0.3)  
 
 # --- CONTRÔLES CAO / CAMÉRA ---
 USER_ZOOM = True      
 USER_SPIN = True      
 USER_PAN = True      
-DEFAULT_ZOOM = 3.5 
 DEFAULT_ORIENTATION = vector(-1, -1, -0.6)
 
 # --- CONSTANTES DES AXES DE RÉFÉRENCE DU MONDE ---
 AXIS_LENGTH = 2.0
-AXIS_WIDTH = 0.02
-COLOR_X = color.red
-COLOR_Y = color.green
-COLOR_Z = color.blue                  
+AXIS_WIDTH = 0.02              
 ORIGIN = vector(0, 0, 0)
 
 # --- CONSTANTES DE LA GRILLE (CADRE CAO) ---
 GRID_SIZE = 2.0       
 GRID_STEP = 0.5       
-COLOR_GRID = vector(0.82, 0.82, 0.82) 
 
 # --- CONSTANTES DU VECTEUR D'ACCÉLÉRATION ---
 ACCEL_WIDTH = 0.07
-COLOR_ACCEL = color.magenta          
 DEFAULT_DIR = vector(0, 0, -1)
 
 # --- DIMENSIONS DU MODÈLE CARTE 3D ---
@@ -44,10 +43,10 @@ MINI_AXIS_LEN = 0.45
 
 class IMUVisualizer3D:
     def __init__(self, titre="Détection de Chute - Visualiseur 3D"):
-        # 1. Création du canevas sans titre complexe pour éviter le crash WebGL
+        # 1. Création du canevas en résolution native
         self.scene = canvas(
-            width=WINDOW_WIDTH,
-            height=WINDOW_HEIGHT,
+            width=WINDOW_WIDTH-30,
+            height=WINDOW_HEIGHT-(int)(580*FONT_SIZE/25),
             background=BG_COLOR
         )
         self.scene.userzoom = USER_ZOOM
@@ -62,7 +61,7 @@ class IMUVisualizer3D:
 
         self.mode = 'objet'
 
-        # 2. Injection sécurisée du HTML et CSS a posteriori
+        # 2. Injection sécurisée du HTML et CSS a posteriori (sans JS perturbateur)
         self.scene.append_to_title(
             f"<style> select {{ font-size: {FONT_SIZE}px; padding: 5px; cursor: pointer; }} </style>"
             f"<h2 style='font-size: {FONT_SIZE + 8}px; margin-bottom: 5px; font-family: sans-serif;'>{titre}</h2>"
@@ -72,7 +71,7 @@ class IMUVisualizer3D:
             f"• <b>Zoom :</b> Molette souris</p>"
         )
 
-        self.scene.append_to_title('<span style="font-size: 20px; font-family: sans-serif;"><b>Mode d\'affichage : </b></span>')
+        self.scene.append_to_title(f'<span style="font-size: {FONT_SIZE}px; font-family: sans-serif;"><b>Mode d\'affichage : </b></span>')
         menu(
             choices=['Objet (Gravité fixe)', 'Vecteur (IMU fixe)'],
             bind=self._on_mode_change,
@@ -86,12 +85,12 @@ class IMUVisualizer3D:
         self.axe_y = arrow(pos=ORIGIN, axis=vector(0, AXIS_LENGTH, 0), color=COLOR_Y, shaftwidth=AXIS_WIDTH, visible=False)
         self.axe_z = arrow(pos=ORIGIN, axis=vector(0, 0, AXIS_LENGTH), color=COLOR_Z, shaftwidth=AXIS_WIDTH, visible=False)
 
-        # Taille du texte (height) augmentée à 22
-        self.lbl_x = label(pos=vector(AXIS_LENGTH + 0.1, 0, 0), text='X', box=False, height=22, color=COLOR_X, opacity=0, visible=False)
-        self.lbl_y = label(pos=vector(0, AXIS_LENGTH + 0.1, 0), text='Y (USB)', box=False, height=22, color=COLOR_Y, opacity=0, visible=False)
-        self.lbl_z = label(pos=vector(0, 0, AXIS_LENGTH + 0.1), text='Z', box=False, height=22, color=COLOR_Z, opacity=0, visible=False)
+        # Taille du texte (height) augmentée à 35
+        self.lbl_x = label(pos=vector(AXIS_LENGTH + 0.1, 0, 0), text='X', box=False, height=FONT_SIZE+10, color=COLOR_X, opacity=0, visible=False)
+        self.lbl_y = label(pos=vector(0, AXIS_LENGTH + 0.1, 0), text='Y (USB)', box=False, height=FONT_SIZE+10, color=COLOR_Y, opacity=0, visible=False)
+        self.lbl_z = label(pos=vector(0, 0, AXIS_LENGTH + 0.1), text='Z', box=False, height=FONT_SIZE+10, color=COLOR_Z, opacity=0, visible=False)
 
-        self.accel_arrow = arrow(pos=ORIGIN, axis=DEFAULT_DIR, color=COLOR_ACCEL, shaftwidth=ACCEL_WIDTH, visible=False)
+        self.accel_arrow = arrow(pos=ORIGIN, axis=DEFAULT_DIR, color=COLOR_GRAVITY, shaftwidth=ACCEL_WIDTH, visible=False)
 
         self.pcb = box(
             pos=ORIGIN,
@@ -114,11 +113,11 @@ class IMUVisualizer3D:
         self.mini_y = arrow(pos=ORIGIN, axis=vector(0, MINI_AXIS_LEN, 0), color=COLOR_Y, shaftwidth=0.015, visible=True)
         self.mini_z = arrow(pos=ORIGIN, axis=vector(0, 0, MINI_AXIS_LEN), color=COLOR_Z, shaftwidth=0.015, visible=True)
 
-        self.mini_lbl_x = label(pos=ORIGIN, text='X', box=False, height=22, color=COLOR_X, opacity=0, visible=True)
-        self.mini_lbl_y = label(pos=ORIGIN, text='Y', box=False, height=22, color=COLOR_Y, opacity=0, visible=True)
-        self.mini_lbl_z = label(pos=ORIGIN, text='Z', box=False, height=22, color=COLOR_Z, opacity=0, visible=True)
+        self.mini_lbl_x = label(pos=ORIGIN, text='X', box=False, height=FONT_SIZE+10, color=COLOR_X, opacity=0, visible=True)
+        self.mini_lbl_y = label(pos=ORIGIN, text='Y', box=False, height=FONT_SIZE+10, color=COLOR_Y, opacity=0, visible=True)
+        self.mini_lbl_z = label(pos=ORIGIN, text='Z', box=False, height=FONT_SIZE+10, color=COLOR_Z, opacity=0, visible=True)
 
-        self.gravity_arrow = arrow(pos=ORIGIN, axis=vector(0, 0, -1.5), color=color.cyan, shaftwidth=ACCEL_WIDTH, visible=True)
+        self.gravity_arrow = arrow(pos=ORIGIN, axis=vector(0, 0, -1.5), color=COLOR_GRAVITY, shaftwidth=ACCEL_WIDTH, visible=True)
 
     def _draw_grid(self):
         val = -GRID_SIZE
