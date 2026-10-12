@@ -4,7 +4,7 @@ import threading
 # --- CONSTANTES DE CONNEXION ---
 DEFAULT_BAUDRATE = 115200
 SERIAL_TIMEOUT = 0.1
-DEFAULT_DATA = (0.0, 0.0, 1.0) # Valeur par défaut (gravité sur Z)
+DEFAULT_DATA = (0.0, 0.0, 1.0) # Vecteur par défaut
 
 class IMUSerialReader:
     def __init__(self, port, baudrate=DEFAULT_BAUDRATE):
@@ -23,11 +23,10 @@ class IMUSerialReader:
             self.thread.start()
             print(f"[*] Connecté au port {self.port}")
         except Exception as e:
-            print(f"[!] Erreur de connexion : {e}")
-            exit()
+            print(f"[!] Erreur de connexion série : {e}")
+            exit(1)
 
     def _read_loop(self):
-        # Boucle exécutée en arrière-plan pour vider le buffer en continu
         while self.is_running:
             if self.serial_conn.in_waiting > 0:
                 try:
@@ -36,12 +35,12 @@ class IMUSerialReader:
                     if len(valeurs) == 3:
                         self.latest_data = tuple(map(float, valeurs))
                 except Exception:
-                    pass # Ignore les trames corrompues (ex: au démarrage)
+                    pass
 
     def get_data(self):
         return self.latest_data
 
     def stop(self):
         self.is_running = False
-        if self.serial_conn:
+        if self.serial_conn and self.serial_conn.is_open:
             self.serial_conn.close()

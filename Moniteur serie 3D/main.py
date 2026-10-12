@@ -8,26 +8,21 @@ WINDOW_TITLE = "Visualisation Temps Réel Nano 33 BLE"
 FPS_LIMIT = 60
 
 def main():
-    # 1. Initialisation des modules
     lecteur = IMUSerialReader(port=PORT_SERIE)
     afficheur = IMUVisualizer3D(titre=WINDOW_TITLE)
-    
-    # 2. Lancement de la lecture des données en arrière-plan
+
     lecteur.start()
-    print(f"[*] Lancement de l'affichage 3D à {FPS_LIMIT} FPS...")
-    
+    print(f"[*] Visualisation lancée à {FPS_LIMIT} FPS...")
+    print("[*] Commandes : Clic droit = Orbiter | Shift+Clic gauche = Déplacer | Molette = Zoomer")
+
     try:
-        # 3. Boucle principale
         while True:
-            rate(FPS_LIMIT) 
-            
-            # Récupération et mise à jour
+            rate(FPS_LIMIT)
             x, y, z = lecteur.get_data()
             afficheur.update_vector(x, y, z)
-            
+
     except KeyboardInterrupt:
-        # Gestion propre de l'arrêt si tu fais Ctrl+C
-        print("\n[*] Arrêt du programme...")
+        print("\n[*] Arrêt demandé...")
         lecteur.stop()
 
 if __name__ == "__main__":
