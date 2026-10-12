@@ -40,7 +40,6 @@ MINI_AXIS_LEN = 0.45  # Longueur des flèches du mini-repère
 
 class IMUVisualizer3D:
     def __init__(self, titre="Détection de Chute - Visualiseur 3D"):
-        # Initialisation du canevas
         self.scene = canvas(
             title=f"<h3>{titre}</h3>"
                   "<p style='color:#555;font-size:12px;margin:0;'>"
@@ -62,14 +61,10 @@ class IMUVisualizer3D:
         # Mode actif par défaut : Objet
         self.mode = 'objet'
 
-        # Menu déroulant placé AU-DESSUS du canevas 3D (dans le titre)
-        self.scene.append_to_title('<br><b>Mode d\'affichage : </b>')
-        menu(
-            choices=['Objet (Gravité fixe)', 'Vecteur (IMU fixe)'],
-            bind=self._on_mode_change,
-            pos=self.scene.title
-        )
-        self.scene.append_to_title('<br><br>')
+        # Menu déroulant (Objet placé en premier)
+        self.scene.append_to_caption('\n<b>Mode d\'affichage : </b>')
+        menu(choices=['Objet (Gravité fixe)', 'Vecteur (IMU fixe)'], bind=self._on_mode_change)
+        self.scene.append_to_caption('\n\n')
 
         self._draw_grid()
 
