@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "IMU Nano 33 BLE",
+			"path": "IMU Nano 33 BLE"
+		}
+	],
+	"settings": {}
+}
