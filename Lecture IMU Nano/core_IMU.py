@@ -3,14 +3,22 @@ import sys
 import threading
 import time
 
+# --- CONSTANTES DE CONNEXION ---
+DEFAULT_BAUDRATE = 115200
+SERIAL_TIMEOUT = 0.1
+DEFAULT_DATA = (0.0, 0.0, 1.0) # Vecteur par défaut
+GIL_SWITCH_INTERVAL = 0.0005   # Le thread de lecture reprend la main en <0,5 ms (5 ms par défaut) : horodatages précis
+MAX_CONSECUTIVE_ERRORS = 20    # Erreurs série d'affilée avant de déclarer le port perdu
+ERROR_RETRY_DELAY = 0.05
+
+# --- CONSTANTES DE MESURE DE FRÉQUENCE ---
 FREQ_PERIOD_S = 1.0 # Période de calcul de la fréquence
 STALE_FACTOR = 2.5  # Au-delà de ce nombre de périodes sans événement, la fréquence tombe à 0
 
 
 class RateMeter:
-    """Fréquence moyenne par période, calculée sur les événements eux-mêmes (comme freq_test.py) :
-    la fenêtre commence et finit sur un événement, donc N événements / N intervalles exacts.
-    Une fenêtre à bornes arbitraires compterait N±1 événements, soit ±1/période d'erreur."""
+    """Fréquence moyenne par période, calculée sur les événements eux-mêmes :
+    la fenêtre commence et finit sur un événement, donc N événements / N intervalles exacts."""
 
     def __init__(self, period_s=FREQ_PERIOD_S):
         self.period_s = period_s
@@ -39,14 +47,6 @@ class RateMeter:
             if time.perf_counter() - self._last_tick > STALE_FACTOR * self.period_s:
                 return 0.0
             return self._rate
-
-# --- CONSTANTES DE CONNEXION ---
-DEFAULT_BAUDRATE = 115200
-SERIAL_TIMEOUT = 0.1
-DEFAULT_DATA = (0.0, 0.0, 1.0) # Vecteur par défaut
-GIL_SWITCH_INTERVAL = 0.0005   # Le thread de lecture reprend la main en <0,5 ms (5 ms par défaut) : horodatages précis
-MAX_CONSECUTIVE_ERRORS = 20    # Erreurs série d'affilée avant de déclarer le port perdu
-ERROR_RETRY_DELAY = 0.05
 
 class IMUSerialReader:
     def __init__(self, port, baudrate=DEFAULT_BAUDRATE):

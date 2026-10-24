@@ -27,12 +27,12 @@ pip install vpython pyserial
 
 1. Ouvrir le dossier `IMU Nano 33 BLE` comme projet **PlatformIO** dans VS Code.
 2. Brancher l'Arduino Nano 33 BLE et **uploader** le code (bouton *Upload*).
-3. Dans `Lecture IMU Nano/main.py`, modifier `PORT_SERIE` (ex. `'COM6'`) pour mettre le bon port COM.
-4. Si besoin, adapter la résolution dans `Lecture IMU Nano/core_3D.py` (`WINDOW_WIDTH`, `WINDOW_HEIGHT`).
-5. Fermer le moniteur série de PlatformIO, qui occupe le port, puis lancer :
+3. Si besoin, adapter la résolution dans `Lecture IMU Nano/core_3D.py` (`WINDOW_WIDTH`, `WINDOW_HEIGHT`).
+4. Fermer le moniteur série de PlatformIO, qui occupe le port, puis lancer :
 
    ```bash
    python main.py
    ```
 
-6. Une fenêtre s'ouvre dans le navigateur avec l'interface 3D.
+5. Une fenêtre s'ouvre dans le navigateur avec l'interface 3D.
+6. Choisir le port COM correspondant à l'Arduino sur l'interface.

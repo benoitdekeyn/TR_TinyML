@@ -2,12 +2,11 @@
 #include <mbed.h>
 #include <Arduino_BMI270_BMM150.h>
 
-#define FREQ 50 // Fréquence d'échantillonnage en Hz
+#define FREQ 50 // Fréquence d'actualisation en Hz
 
 mbed::Ticker ticker;
 volatile bool tick = false;
 
-// L'interruption ne fait que lever un drapeau : l'I2C et le port série ne sont pas ISR-safe
 void onTick() {
   tick = true;
 }
@@ -32,7 +31,7 @@ void loop() {
   if (IMU.accelerationAvailable()) {
     IMU.readAcceleration(x, y, z);
 
-    // Permutation pour aligner le capteur Bosch sur la sérigraphie du PCB :
+    // Pour aligner le capteur sur la sérigraphie du PCB 
     float temp_x = x;
     x = y;
     y = temp_x;

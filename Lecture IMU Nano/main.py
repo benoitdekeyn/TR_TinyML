@@ -2,7 +2,7 @@ from vpython import rate
 from core_IMU import IMUSerialReader, RateMeter
 # --- CONSTANTES GLOBALES ---
 DEFAULT_COM_NUMBER = 6
-WINDOW_TITLE = "Projet TinyML - Détection de Chute"
+WINDOW_TITLE = "Lecture IMU Nano 33 BLE"
 FPS_LIMIT = 60 
 
 from core_3D import IMUVisualizer3D
