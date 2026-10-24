@@ -4,8 +4,8 @@
 			"path": "."
 		},
 		{
-			"name": "IMU Nano 33 BLE",
-			"path": "IMU Nano 33 BLE"
+			"name": "Code Nano 33 BLE IMU",
+			"path": "Code_Nano_33_BLE_IMU"
 		}
 	],
 	"settings": {}

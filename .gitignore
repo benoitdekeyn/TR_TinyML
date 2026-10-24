@@ -1,1 +1,8 @@
-/Moniteur serie 3D/__pycache__
+# Ignore Python cache files from any sub folder
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# vscode files from any sub folder
+**/.vscode/
