@@ -15,14 +15,14 @@ def main():
 
     graphes = RealtimeGraphs(WINDOW_TITLE)  # Créés avant la 3D : titre + durée, puis graphes, au-dessus de la 3D
 
-    def on_sample(accel, gyro):
+    def on_sample(timestamp, accel, gyro):
         filtre.update(accel, gyro)
-        graphes.add_sample(accel, gyro)
+        graphes.add_sample(timestamp, accel, gyro)
 
     def connecter(port):
         # Liaison série -> filtre et graphes : chaque mesure (accel g, gyro °/s)
         graphes.clear()
-        lecteur = IMUSerialReader(port=port, on_sample=on_sample)
+        lecteur = IMUSerialReader(port=port, on_sample=on_sample, is_recording=lambda: not graphes.paused)
         if lecteur.start():
             state["lecteur"] = lecteur
             return True

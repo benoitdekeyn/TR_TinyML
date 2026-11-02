@@ -53,9 +53,12 @@ class RateMeter:
             return self._rate
 
 class IMUSerialReader:
-    def __init__(self, port, baudrate=DEFAULT_BAUDRATE, output_dir=DEFAULT_OUTPUT_DIR, on_sample=None):
-        # on_sample(accel_g, gyro_dps) : appelé dans le thread de lecture à chaque mesure valide
+    def __init__(self, port, baudrate=DEFAULT_BAUDRATE, output_dir=DEFAULT_OUTPUT_DIR, on_sample=None,
+                 is_recording=lambda: True):
+        # on_sample(timestamp, accel_g, gyro_dps) : appelé dans le thread de lecture à chaque mesure valide
+        # is_recording() : l'enregistrement dans output_dir n'a lieu que tant qu'il renvoie True
         self.on_sample = on_sample
+        self.is_recording = is_recording
         sys.setswitchinterval(GIL_SWITCH_INTERVAL)
         self.port = port
         self.baudrate = baudrate
@@ -120,10 +123,12 @@ class IMUSerialReader:
                 self.freq_meter.tick()
                 if valeurs[0].startswith(DEFAULT_YEAR):
                     self._send_date()  # carte non synchronisée (ex. reset)
-                else:
+                elif self.is_recording():
                     self.recorder.write(valeurs[0], mesures)
+                else:
+                    self.recorder.close()  # En pause : fichier fermé, un nouveau sera créé à la reprise
                 if self.on_sample is not None:
-                    self.on_sample(mesures[:3], mesures[3:])
+                    self.on_sample(valeurs[0], mesures[:3], mesures[3:])
 
     def _send_date(self):
         now = time.monotonic()
