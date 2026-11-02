@@ -12,11 +12,12 @@ GYRO_RANGE_DPS = 2000        # Plage du BMI270 : au-delà, le gyro est considér
 ACCEL_REJECTION_DEG = 10.0   # Rejette l'accéléromètre lors des accélérations linéaires
 RECOVERY_PERIOD_S = 5        # Délai avant de refaire confiance à l'accéléromètre après un rejet
 MAX_DT_S = 0.5               # Au-delà, l'intervalle est ignoré (pause, reconnexion)
+ACCEL_SIGN = -1.0            # La carte envoie la gravité (-1 g axe vers le haut), imufusion veut +1 g
 
 
 class Pose(NamedTuple):
     """Résultat du filtre, consommé par la vue 3D."""
-    gravity: tuple   # direction de la gravité (g) dans le repère capteur
+    gravity: tuple   # gravité (vers le bas) dans le repère capteur, même convention que les mesures de la carte
     x_axis: tuple    # axe X du capteur dans le repère monde (Z vers le haut)
     y_axis: tuple    # axe Y du capteur (USB)
     z_axis: tuple    # axe Z du capteur (normale à la carte)
@@ -44,7 +45,10 @@ class OrientationFilter:
         self._lock = threading.Lock()  # update() tourne dans le thread série, pose() dans le thread 3D
 
     def update(self, accel, gyro, t=None):
-        """Entrée : accel en g, gyro en °/s (repère capteur), t en secondes (défaut : horloge locale)."""
+        """Entrée : accel en g, gyro en °/s (repère capteur, repère direct), t en secondes (défaut : horloge locale).
+        La carte envoie la gravité (-1 g sur un axe dont la flèche pointe vers le haut) ; imufusion attend
+        l'accélération mesurée (+1 g vers le haut), d'où ACCEL_SIGN. Gyro : sens trigonométrique = positif,
+        ce qui est la convention d'imufusion."""
         if t is None:
             t = time.perf_counter()
         with self._lock:
@@ -52,17 +56,19 @@ class OrientationFilter:
             self._last_t = t
             if 0 < dt < MAX_DT_S:
                 self.ahrs.set_sample_period(dt)
-                self.ahrs.update_no_magnetometer(np.array(gyro, dtype=float), np.array(accel, dtype=float))
+                self.ahrs.update_no_magnetometer(
+                    np.array(gyro, dtype=float), ACCEL_SIGN * np.array(accel, dtype=float)
+                )
 
     def pose(self):
         """Orientation courante, cohérente (un seul instant). Repère monde : Z vers le haut."""
         with self._lock:
             q = self.ahrs.get_quaternion()
-            gravity = self.ahrs.get_gravity()
+            up = self.ahrs.get_gravity()  # imufusion : direction du haut dans le repère capteur
         r = imufusion.quaternion_to_matrix(q)  # colonnes = axes du capteur exprimés dans le monde
         euler = imufusion.quaternion_to_euler(q)
         return Pose(
-            gravity=tuple(float(v) for v in gravity),
+            gravity=tuple(-float(v) for v in up),  # même convention que la carte : gravité vers le bas
             x_axis=tuple(float(v) for v in r[:, 0]),
             y_axis=tuple(float(v) for v in r[:, 1]),
             z_axis=tuple(float(v) for v in r[:, 2]),
