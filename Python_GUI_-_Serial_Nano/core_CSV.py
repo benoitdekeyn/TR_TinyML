@@ -34,7 +34,7 @@ class CSVRecorder:
         # Une ligne série tronquée (caractères perdus) ne doit pas créer un faux fichier
         if not TIMESTAMP_RE.match(timestamp):
             return
-        date = timestamp[:10]
+        date = timestamp[:16]
         if date != self._date:
             self.close()
             self._path = self._unique_path(date)

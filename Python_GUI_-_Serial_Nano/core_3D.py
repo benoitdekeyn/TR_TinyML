@@ -43,10 +43,12 @@ USB_WIDTH = 0.30
 USB_LENGTH = 0.25     
 USB_HEIGHT = 0.12     
 MINI_AXIS_LEN = 0.45  
+# Le repère capteur suit la sérigraphie (Z vers le haut, carte à plat) : la face haute est donc +Z.
+BOARD_TOP_SIGN = 1
 
 
 class IMUVisualizer3D:
-    def __init__(self, titre="Détection de Chute - Visualiseur 3D", on_connect=None, on_disconnect=None, default_com=""):
+    def __init__(self, on_connect=None, on_disconnect=None, default_com=""):
         # on_connect(nom_port) -> bool : tente la connexion ; on_disconnect() : libère le port
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
@@ -55,7 +57,11 @@ class IMUVisualizer3D:
         self._last_freq_update = 0.0
         self._last_shown = None
 
-        # 1. Création du canevas en résolution native
+        # 1. Un canevas de 1 px porte la connexion série (affichée en tout premier de la page, voir l'ordre CSS) ;
+        # il est créé avant la scène pour que celle-ci reste le canevas courant des objets 3D.
+        self.conn = canvas(width=WINDOW_WIDTH-30, height=1, background=BG_COLOR)
+
+        # 2. Création du canevas 3D en résolution native
         self.scene = canvas(
             width=WINDOW_WIDTH-30,
             height=WINDOW_HEIGHT-(int)(580*FONT_SIZE/25),
@@ -73,37 +79,37 @@ class IMUVisualizer3D:
 
         self.mode = 'objet'
 
-        # 2. Injection sécurisée du HTML et CSS a posteriori (sans JS perturbateur)
-        self.scene.append_to_title(
+        # 3. Injection sécurisée du HTML et CSS a posteriori (sans JS perturbateur)
+        # Ordre de la page : connexion (-3), en-tête + graphes (-2, -1, voir core_graphe), puis infos 3D et scène
+        self.conn.append_to_title(
             f"<style> select, input, button {{ font-size: {FONT_SIZE}px; height: {CONTROL_HEIGHT}px; "
             f"box-sizing: border-box; padding: 0 {FONT_SIZE // 2}px; vertical-align: middle; font-family: sans-serif; }} "
-            f"select, button {{ cursor: pointer; }} button:disabled, select:disabled {{ cursor: not-allowed; }} </style>"
-            f"<h2 style='font-size: {FONT_SIZE + 8}px; margin-bottom: 5px; font-family: sans-serif;'>{titre}</h2>"
-            f"<p style='color:#555; font-size: {FONT_SIZE}px; margin: 0 0 15px 0; font-family: sans-serif;'>"
-            f"• <b>Orbite :</b> Clic droit + glisser<br>"
-            f"• <b>Déplacer (Pan) :</b> Shift + Clic gauche + glisser<br>"
-            f"• <b>Zoom :</b> Molette souris</p>"
+            f"select, button {{ cursor: pointer; }} button:disabled, select:disabled {{ cursor: not-allowed; }} "
+            f"#glowscript > div:has(.imu-conn) {{ order: -3; }} </style>"
+            f"<div class='imu-conn'></div>"
         )
 
         # Écran d'accueil : choix du port COM (layout identique avant/après connexion)
         font = f'style="font-size: {FONT_SIZE}px; font-family: sans-serif;"'
-        self.scene.append_to_title(f'<span {font}><b>Port série : COM</b></span>')
+        self.conn.append_to_title(f'<span {font}><b>Port série : COM</b></span>')
         self.com_input = winput(
             bind=self._on_com_enter, type='numeric', width=int(FONT_SIZE * 3), text=str(default_com),
-            pos=self.scene.title_anchor
+            pos=self.conn.title_anchor
         )
-        self.scene.append_to_title('&nbsp;')
-        self.btn_connect = button(text='Tester la connexion', bind=self._on_test_click, pos=self.scene.title_anchor)
-        self.scene.append_to_title('&nbsp;')
-        self.btn_disconnect = button(text='Déconnecter', bind=self._on_disconnect_click, pos=self.scene.title_anchor)
+        self.conn.append_to_title('&nbsp;')
+        self.btn_connect = button(text='Tester la connexion', bind=self._on_test_click, pos=self.conn.title_anchor)
+        self.conn.append_to_title('&nbsp;')
+        self.btn_disconnect = button(text='Déconnecter', bind=self._on_disconnect_click, pos=self.conn.title_anchor)
         self.btn_disconnect.disabled = True
-        self.scene.append_to_title('&nbsp;&nbsp;')
-        self.status = wtext(text=f'<span {font}>En attente de connexion...</span>', pos=self.scene.title_anchor)
-        self.scene.append_to_title('<br>')
+        self.conn.append_to_title('&nbsp;&nbsp;')
+        self.status = wtext(text=f'<span {font}>En attente de connexion...</span>', pos=self.conn.title_anchor)
+        self.conn.append_to_title('<br>')
 
-        self.scene.append_to_title(f'<span {font}><b>Réception série : </b></span>')
-        self.freq_text = wtext(text=f'<span {font}>-- Hz</span>', pos=self.scene.title_anchor)
-        self.scene.append_to_title(f'<span {font}>&nbsp;&nbsp;|&nbsp;&nbsp;<b>Affichage 3D : </b></span>')
+        self.conn.append_to_title(f'<span {font}><b>Réception série : </b></span>')
+        self.freq_text = wtext(text=f'<span {font}>-- Hz</span>', pos=self.conn.title_anchor)
+        self.conn.append_to_title('<br><br>')
+
+        self.scene.append_to_title(f'<span {font}><b>Affichage 3D : </b></span>')
         self.fps_text = wtext(text=f'<span {font}>-- FPS</span>', pos=self.scene.title_anchor)
         self.scene.append_to_title('<br>')
 
@@ -114,7 +120,12 @@ class IMUVisualizer3D:
             pos=self.scene.title_anchor
         )
         self.mode_menu.disabled = True
-        self.scene.append_to_title('<br><br>')
+        self.scene.append_to_title(
+            f"<p style='color:#555; font-size: {FONT_SIZE}px; margin: 10px 0 15px 0; font-family: sans-serif;'>"
+            f"• <b>Orbite :</b> Clic droit + glisser<br>"
+            f"• <b>Déplacer (Pan) :</b> Shift + Clic gauche + glisser<br>"
+            f"• <b>Zoom :</b> Molette souris</p>"
+        )
 
         self._create_scene_objects()
 
@@ -283,17 +294,18 @@ class IMUVisualizer3D:
             z_world = vector(*pose.z_axis)
 
             self.pcb.axis = y_world * BOARD_LENGTH
-            self.pcb.up = z_world
+            top_world = z_world * BOARD_TOP_SIGN  # face composants de la carte, vers le haut quand elle est à plat
+            self.pcb.up = top_world
 
             offset_y = (BOARD_LENGTH / 2) - (USB_LENGTH / 2)
             offset_z = (BOARD_THICK / 2) + (USB_HEIGHT / 2)
-            usb_offset = y_world * offset_y + z_world * offset_z
+            usb_offset = y_world * offset_y + top_world * offset_z
 
             self.usb.pos = self.pcb.pos + usb_offset
             self.usb.axis = y_world * USB_LENGTH
-            self.usb.up = z_world
+            self.usb.up = top_world
 
-            top_center = self.pcb.pos + z_world * (BOARD_THICK / 2)
+            top_center = self.pcb.pos + top_world * (BOARD_THICK / 2)
 
             self.mini_x.pos = top_center
             self.mini_x.axis = x_world * MINI_AXIS_LEN

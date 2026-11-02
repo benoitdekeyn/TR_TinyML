@@ -79,9 +79,9 @@ void loop() {
     az = -az;
     // Même correction pour le gyroscope
     float temp_gx = gx;
-    gx = gy;
-    gy = temp_gx;
-    gz = -gz;
+    gx = -gy;
+    gy = -temp_gx;
+    gz = +gz;
 
     // Calcul du timestamp basé sur la baseEpoch
     // et le temps écoulé depuis baseMillis
