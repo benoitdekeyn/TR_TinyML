@@ -2,6 +2,11 @@ import serial
 import sys
 import threading
 import time
+from datetime import datetime
+from core_CSV import CSVRecorder, DEFAULT_OUTPUT_DIR
+
+DEFAULT_YEAR = "2000"  # Date par défaut de l'Arduino avant synchronisation
+DATE_RESEND_DELAY = 1.0
 
 # --- CONSTANTES DE CONNEXION ---
 DEFAULT_BAUDRATE = 115200
@@ -49,7 +54,7 @@ class RateMeter:
             return self._rate
 
 class IMUSerialReader:
-    def __init__(self, port, baudrate=DEFAULT_BAUDRATE):
+    def __init__(self, port, baudrate=DEFAULT_BAUDRATE, output_dir=DEFAULT_OUTPUT_DIR):
         sys.setswitchinterval(GIL_SWITCH_INTERVAL)
         self.port = port
         self.baudrate = baudrate
@@ -60,6 +65,8 @@ class IMUSerialReader:
         self.freq_meter = RateMeter()
         self.connection_lost = False
         self.error = ""
+        self.recorder = CSVRecorder(output_dir)
+        self._last_date_sent = -DATE_RESEND_DELAY
 
     def start(self):
         """Ouvre le port et lance la lecture. Retourne True si la connexion a réussi."""
@@ -69,6 +76,7 @@ class IMUSerialReader:
             print(f"[!] Erreur de connexion série : {e}")
             return False
         self.is_running = True
+        self._send_date()
         self.thread = threading.Thread(target=self._read_loop, daemon=True)
         self.thread.start()
         print(f"[*] Connecté au port {self.port}")
@@ -104,16 +112,32 @@ class IMUSerialReader:
             for ligne in lignes:
                 try:
                     valeurs = ligne.decode('utf-8').strip().split(',')
-                    if len(valeurs) == 3:
-                        self.latest_data = tuple(map(float, valeurs))
+                    if len(valeurs) == 7:
+                        mesures = tuple(map(float, valeurs[1:]))
+                        self.latest_data = mesures[:3]
                         self.freq_meter.tick()
+                        if valeurs[0].startswith(DEFAULT_YEAR):
+                            self._send_date()  # carte non synchronisée (ex. reset)
+                        else:
+                            self.recorder.write(valeurs[0], mesures)
                 except ValueError:
                     pass
 
     def get_data(self):
         return self.latest_data
 
+    def _send_date(self):
+        now = time.monotonic()
+        if now - self._last_date_sent < DATE_RESEND_DELAY:
+            return
+        self._last_date_sent = now
+        try:
+            self.serial_conn.write(datetime.now().strftime("date:%Y%m%d%H%M%S\n").encode())
+        except Exception:
+            pass
+
     def stop(self):
         self.is_running = False
         if self.serial_conn and self.serial_conn.is_open:
             self.serial_conn.close()
+        self.recorder.close()
