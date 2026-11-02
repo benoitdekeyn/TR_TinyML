@@ -11,7 +11,6 @@ DATE_RESEND_DELAY = 1.0
 # --- CONSTANTES DE CONNEXION ---
 DEFAULT_BAUDRATE = 115200
 SERIAL_TIMEOUT = 0.1
-DEFAULT_DATA = (0.0, 0.0, 1.0) # Vecteur par défaut
 GIL_SWITCH_INTERVAL = 0.0005   # Le thread de lecture reprend la main en <0,5 ms (5 ms par défaut) : horodatages précis
 MAX_CONSECUTIVE_ERRORS = 20    # Erreurs série d'affilée avant de déclarer le port perdu
 ERROR_RETRY_DELAY = 0.05
@@ -54,13 +53,14 @@ class RateMeter:
             return self._rate
 
 class IMUSerialReader:
-    def __init__(self, port, baudrate=DEFAULT_BAUDRATE, output_dir=DEFAULT_OUTPUT_DIR):
+    def __init__(self, port, baudrate=DEFAULT_BAUDRATE, output_dir=DEFAULT_OUTPUT_DIR, on_sample=None):
+        # on_sample(accel_g, gyro_dps) : appelé dans le thread de lecture à chaque mesure valide
+        self.on_sample = on_sample
         sys.setswitchinterval(GIL_SWITCH_INTERVAL)
         self.port = port
         self.baudrate = baudrate
         self.serial_conn = None
         self.is_running = False
-        self.latest_data = DEFAULT_DATA
         self.thread = None
         self.freq_meter = RateMeter()
         self.connection_lost = False
@@ -112,19 +112,18 @@ class IMUSerialReader:
             for ligne in lignes:
                 try:
                     valeurs = ligne.decode('utf-8').strip().split(',')
-                    if len(valeurs) == 7:
-                        mesures = tuple(map(float, valeurs[1:]))
-                        self.latest_data = mesures[:3]
-                        self.freq_meter.tick()
-                        if valeurs[0].startswith(DEFAULT_YEAR):
-                            self._send_date()  # carte non synchronisée (ex. reset)
-                        else:
-                            self.recorder.write(valeurs[0], mesures)
+                    if len(valeurs) != 7:
+                        continue
+                    mesures = tuple(map(float, valeurs[1:]))
                 except ValueError:
-                    pass
-
-    def get_data(self):
-        return self.latest_data
+                    continue
+                self.freq_meter.tick()
+                if valeurs[0].startswith(DEFAULT_YEAR):
+                    self._send_date()  # carte non synchronisée (ex. reset)
+                else:
+                    self.recorder.write(valeurs[0], mesures)
+                if self.on_sample is not None:
+                    self.on_sample(mesures[:3], mesures[3:])
 
     def _send_date(self):
         now = time.monotonic()

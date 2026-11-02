@@ -1,8 +1,11 @@
 import csv
 import os
+import re
 
 DEFAULT_OUTPUT_DIR = "recordings"  # Dossier de sortie personnalisable
 HEADER = ["timestamp", "ax", "ay", "az", "gx", "gy", "gz"]
+MIN_ROWS = 10  # Un fichier de moins de MIN_ROWS mesures est supprimé à la fermeture
+TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$")
 
 
 class CSVRecorder:
@@ -14,6 +17,8 @@ class CSVRecorder:
         self._date = None
         self._file = None
         self._writer = None
+        self._path = None
+        self._rows = 0
         os.makedirs(output_dir, exist_ok=True)
 
     def _unique_path(self, date):
@@ -26,16 +31,24 @@ class CSVRecorder:
 
     def write(self, timestamp, values):
         """timestamp : 'YYYY-MM-DD HH:MM:SS.mmm' ; values : 6 flottants."""
+        # Une ligne série tronquée (caractères perdus) ne doit pas créer un faux fichier
+        if not TIMESTAMP_RE.match(timestamp):
+            return
         date = timestamp[:10]
         if date != self._date:
             self.close()
-            self._file = open(self._unique_path(date), "w", newline="")
+            self._path = self._unique_path(date)
+            self._file = open(self._path, "w", newline="")
             self._writer = csv.writer(self._file)
             self._writer.writerow(HEADER)
             self._date = date
         self._writer.writerow([timestamp, *values])
+        self._rows += 1
 
     def close(self):
         if self._file:
             self._file.close()
-            self._file = self._writer = self._date = None
+            if self._rows < MIN_ROWS:
+                os.remove(self._path)
+            self._file = self._writer = self._date = self._path = None
+            self._rows = 0

@@ -1,4 +1,4 @@
-from vpython import canvas, arrow, vector, color, curve, label, box, menu, cross, mag, acos, winput, button, wtext
+from vpython import canvas, arrow, vector, color, curve, label, box, menu, winput, button, wtext
 import time
 
 FREQ_REFRESH_S = 1.0 # Mise à jour de l'affichage des fréquences, une fois par seconde
@@ -269,33 +269,18 @@ class IMUVisualizer3D:
         self.freq_text.text = f'<span {style}>{hz} Hz</span>'
         self.fps_text.text = f'<span {style}>{fps} FPS</span>'
 
-    def update_vector(self, x, y, z):
+    def update_pose(self, pose):
+        """Affiche une Pose du filtre (core_filtre.Pose) : aucune estimation ici, seulement du rendu."""
         if not self.connected:
-            return
-        v = vector(x, y, z)
-        norme = mag(v)
-        if norme < 0.01:
             return
 
         if self.mode == 'vecteur':
-            self.accel_arrow.axis = v
+            self.accel_arrow.axis = vector(*pose.gravity)
 
         elif self.mode == 'objet':
-            v_mesure_norm = v / norme
-            v_monde_bas = vector(0, 0, -1)
-
-            axe_rot = cross(v_mesure_norm, v_monde_bas)
-            dot_prod = max(-1.0, min(1.0, v_mesure_norm.dot(v_monde_bas)))
-            angle_rot = acos(dot_prod)
-
-            x_world = vector(1, 0, 0)
-            y_world = vector(0, 1, 0)
-            z_world = vector(0, 0, 1)
-
-            if mag(axe_rot) > 0.001:
-                x_world = x_world.rotate(angle=angle_rot, axis=axe_rot)
-                y_world = y_world.rotate(angle=angle_rot, axis=axe_rot)
-                z_world = z_world.rotate(angle=angle_rot, axis=axe_rot)
+            x_world = vector(*pose.x_axis)
+            y_world = vector(*pose.y_axis)
+            z_world = vector(*pose.z_axis)
 
             self.pcb.axis = y_world * BOARD_LENGTH
             self.pcb.up = z_world

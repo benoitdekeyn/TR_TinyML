@@ -1,5 +1,6 @@
 from vpython import rate
 from core_IMU import IMUSerialReader, RateMeter
+from core_filtre import OrientationFilter
 # --- CONSTANTES GLOBALES ---
 DEFAULT_COM_NUMBER = 6
 WINDOW_TITLE = "Lecture IMU Nano 33 BLE"
@@ -9,9 +10,11 @@ from core_3D import IMUVisualizer3D
 
 def main():
     state = {"lecteur": None}
+    filtre = OrientationFilter()
 
     def connecter(port):
-        lecteur = IMUSerialReader(port=port)
+        # Liaison série -> filtre : chaque mesure (accel g, gyro °/s) alimente le filtre
+        lecteur = IMUSerialReader(port=port, on_sample=filtre.update)
         if lecteur.start():
             state["lecteur"] = lecteur
             return True
@@ -38,8 +41,8 @@ def main():
             if lecteur.connection_lost:
                 afficheur.disconnect(f"Connexion perdue avec {afficheur.port_name}", False)
                 continue
-            x, y, z = lecteur.get_data()
-            afficheur.update_vector(x, y, z)
+            # Filtre -> 3D : l'afficheur ne reçoit que la pose estimée
+            afficheur.update_pose(filtre.pose())
             afficheur.update_frequency(lecteur.get_frequency(), fps_meter.stable_rate())
 
     except KeyboardInterrupt:
