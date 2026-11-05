@@ -1,3 +1,4 @@
+from collections import deque
 import serial
 import threading
 import time
@@ -13,14 +14,21 @@ ERROR_RETRY_DELAY = 0.05
 
 
 class RateMeter:
-    """Compte les événements et publie leur fréquence à intervalles réguliers."""
+    """Moyenne des fréquences mesurées sur les dernières fenêtres."""
 
-    def __init__(self, period_s=FREQ_PERIOD_S):
+    def __init__(self, period_s=FREQ_PERIOD_S, window_size=1, stale_factor=STALE_FACTOR):
+        if period_s <= 0:
+            raise ValueError("period_s doit être supérieur à zéro.")
+        if window_size <= 0:
+            raise ValueError("window_size doit être supérieur à zéro.")
         self.period_s = period_s
+        self.window_size = window_size
+        self.stale_factor = stale_factor
         self._lock = threading.Lock()
         self._count = 0
         self._last_tick = 0.0
         self._rate = 0.0
+        self._rates = deque(maxlen=window_size)
         self._stop_event = threading.Event()
         self._thread = None
 
@@ -31,6 +39,7 @@ class RateMeter:
             self._count = 0
             self._last_tick = 0.0
             self._rate = 0.0
+            self._rates.clear()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._measure_loop, daemon=True)
         self._thread.start()
@@ -49,7 +58,8 @@ class RateMeter:
             now = time.perf_counter()
             with self._lock:
                 count, self._count = self._count, 0
-                self._rate = count / (now - period_start)
+                self._rates.append(count / (now - period_start))
+                self._rate = sum(self._rates) / len(self._rates)
             period_start = now
             deadline += self.period_s
             if deadline <= now:
@@ -57,7 +67,8 @@ class RateMeter:
 
     def stable_rate(self):
         with self._lock:
-            if time.perf_counter() - self._last_tick > STALE_FACTOR * self.period_s:
+            if (self.stale_factor is not None and
+                    time.perf_counter() - self._last_tick > self.stale_factor * self.period_s):
                 return 0.0
             return self._rate
 
@@ -77,7 +88,7 @@ class SerialReceiver:
         self.serial_conn = None
         self.is_running = False
         self.thread = None
-        self.freq_meter = RateMeter()
+        self.freq_meter = RateMeter(window_size=5, stale_factor=None)
         self.connection_lost = False
         self.error = ""
         self._last_date_sent = -DATE_RESEND_DELAY

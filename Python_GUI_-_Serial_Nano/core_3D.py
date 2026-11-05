@@ -273,7 +273,7 @@ class IMUVisualizer3D:
             return
         self._last_freq_update = now
         style = f'style="font-size: {FONT_SIZE}px; font-family: sans-serif;"'
-        hz, fps = round(hz_serie), round(fps_3d)
+        hz, fps = round(hz_serie, 1), round(fps_3d)
         if (hz, fps) == self._last_shown:
             return
         self._last_shown = (hz, fps)
