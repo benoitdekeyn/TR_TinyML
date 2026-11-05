@@ -3,7 +3,7 @@
 #include "calculs.h"
 #include "serial.h"
 
-#define SEUIL_RMS 1.0
+#define SEUIL_RMS 1.1
 #define DUREE_FENETRE 1000 // Durée de la fenêtre en millisecondes
 
 float somme = 0.0;
@@ -18,6 +18,8 @@ void setup_capture(int freq) {
   mesures_comptees = 0;
   duree_fenetre = DUREE_FENETRE;
   frequence = freq;
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
 void detection_loop(float* accel) {
@@ -33,7 +35,7 @@ void detection_loop(float* accel) {
   float variance = calc_variance(somme, somme_carres, mesures_comptees);
   float ecart_type = calc_ecart_type(variance);
   float rms = calc_RMS(somme_carres, mesures_comptees);
-  bool mouvement = determine_mouvement(variance, rms);
+  bool mouvement = mouvement_detecte(variance, rms);
 
   serialSendFeatures(moyenne, ecart_type, variance, rms, mouvement);
 
@@ -42,6 +44,8 @@ void detection_loop(float* accel) {
   mesures_comptees = 0;
 }
 
-bool determine_mouvement(float variance, float rms) {
-  return rms > SEUIL_RMS;
+bool mouvement_detecte(float variance, float rms) {
+  bool mouvement_detecte = rms > SEUIL_RMS;
+  digitalWrite(LED_BUILTIN, mouvement_detecte ? HIGH : LOW);
+  return mouvement_detecte;
 }

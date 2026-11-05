@@ -1,13 +1,14 @@
 #include <Arduino.h>
 #include <Arduino_BMI270_BMM150.h>
 #include "imu.h"
+#include "calculs.h"
 
 // Offsets du gyroscope (°/s), additionnés aux mesures dans le repère brut du capteur
 #define GYRO_OFFSET_X +0.061f
 #define GYRO_OFFSET_Y +0.122f
 #define GYRO_OFFSET_Z -0.122f
 
-#define GRAVITY_1G 0.983
+#define GRAVITY_OFFSET_1G 0.010
 
 // Initialise l'IMU et retourne true si le capteur est détecté.
 bool imuBegin() {
@@ -36,6 +37,13 @@ bool imuRead(float accel[3], float gyro[3]) {
   gyro[0] += (GYRO_OFFSET_X);
   gyro[1] += (GYRO_OFFSET_Y);
   gyro[2] += (GYRO_OFFSET_Z);
+
+  // scale chaque accélération pour que leur normme fasse GRAVITY_OFFSET_1G de plus 
+  float norme = calc_norme(accel);
+  float facteur = (norme + GRAVITY_OFFSET_1G) / norme;
+  accel[0] *= facteur;
+  accel[1] *= facteur;
+  accel[2] *= facteur;
 
   return true;
 }
