@@ -4,6 +4,7 @@ Usage : python freq_test.py [COMx] [durée_s]
 """
 import sys
 import time
+import threading
 import serial
 
 PORT = sys.argv[1] if len(sys.argv) > 1 else "COM6"
@@ -12,41 +13,44 @@ BAUDRATE = 115200
 
 
 def main():
-    ser = serial.Serial(PORT, BAUDRATE, timeout=1)
+    ser = serial.Serial(PORT, BAUDRATE, timeout=0.1)
     ser.reset_input_buffer()
     print(f"[*] Mesure sur {PORT} pendant {DUREE_S:.0f} s (Ctrl+C pour arrêter)")
 
     t0 = time.perf_counter()
-    t_last = t0
-    t_report = t0
     count_total = 0
+    count_lock = threading.Lock()
     count_window = 0
-    dt_min = float("inf")
-    dt_max = 0.0
+    stop_reporter = threading.Event()
+
+    def report_frequency():
+        nonlocal count_window
+        period_start = time.perf_counter()
+        deadline = period_start + 1.0
+        while not stop_reporter.wait(max(0.0, deadline - time.perf_counter())):
+            now = time.perf_counter()
+            with count_lock:
+                count, count_window = count_window, 0
+            print(f"{count / (now - period_start):6.1f} Hz")
+            period_start = now
+            deadline += 1.0
+            if deadline <= now:
+                deadline = now + 1.0
+
+    reporter = threading.Thread(target=report_frequency, daemon=True)
+    reporter.start()
 
     try:
         while time.perf_counter() - t0 < DUREE_S:
-            if not ser.readline():
-                continue
-            now = time.perf_counter()
-            dt = now - t_last
-            t_last = now
-            count_total += 1
-            count_window += 1
-            if count_total > 1:
-                dt_min = min(dt_min, dt)
-                dt_max = max(dt_max, dt)
-
-            if now - t_report >= 1.0:
-                print(f"{count_window / (now - t_report):6.1f} Hz | "
-                      f"intervalle min {dt_min * 1000:6.1f} ms, max {dt_max * 1000:6.1f} ms")
-                t_report = now
-                count_window = 0
-                dt_min = float("inf")
-                dt_max = 0.0
+            if ser.readline():
+                with count_lock:
+                    count_window += 1
+                count_total += 1
     except KeyboardInterrupt:
         pass
     finally:
+        stop_reporter.set()
+        reporter.join()
         ser.close()
 
     total = time.perf_counter() - t0

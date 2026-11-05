@@ -1,147 +1,57 @@
-import serial
-import sys
+import queue
 import threading
-import time
-from datetime import datetime
+
 from core_CSV import CSVRecorder, DEFAULT_OUTPUT_DIR
 
-DEFAULT_YEAR = "2000"  # Date par défaut de l'Arduino avant synchronisation
-DATE_RESEND_DELAY = 1.0
+DEFAULT_YEAR = "2000"
 
-# --- CONSTANTES DE CONNEXION ---
-DEFAULT_BAUDRATE = 115200
-SERIAL_TIMEOUT = 0.1
-GIL_SWITCH_INTERVAL = 0.0005   # Le thread de lecture reprend la main en <0,5 ms (5 ms par défaut) : horodatages précis
-MAX_CONSECUTIVE_ERRORS = 20    # Erreurs série d'affilée avant de déclarer le port perdu
-ERROR_RETRY_DELAY = 0.05
+class IMUProcessor:
+    """Décode les trames brutes et distribue les mesures aux traitements."""
 
-# --- CONSTANTES DE MESURE DE FRÉQUENCE ---
-FREQ_PERIOD_S = 1.0 # Période de calcul de la fréquence
-STALE_FACTOR = 2.5  # Au-delà de ce nombre de périodes sans événement, la fréquence tombe à 0
-
-
-class RateMeter:
-    """Fréquence moyenne par période, calculée sur les événements eux-mêmes :
-    la fenêtre commence et finit sur un événement, donc N événements / N intervalles exacts."""
-
-    def __init__(self, period_s=FREQ_PERIOD_S):
-        self.period_s = period_s
-        self._lock = threading.Lock()
-        self._period_start = None
-        self._count = 0
-        self._last_tick = 0.0
-        self._rate = 0.0
-
-    def tick(self):
-        now = time.perf_counter()
-        with self._lock:
-            self._last_tick = now
-            if self._period_start is None:
-                self._period_start = now
-                return
-            self._count += 1
-            elapsed = now - self._period_start
-            if elapsed >= self.period_s:
-                self._rate = self._count / elapsed
-                self._period_start = now
-                self._count = 0
-
-    def stable_rate(self):
-        with self._lock:
-            if time.perf_counter() - self._last_tick > STALE_FACTOR * self.period_s:
-                return 0.0
-            return self._rate
-
-class IMUSerialReader:
-    def __init__(self, port, baudrate=DEFAULT_BAUDRATE, output_dir=DEFAULT_OUTPUT_DIR, on_sample=None,
-                 is_recording=lambda: True):
-        # on_sample(timestamp, accel_g, gyro_dps) : appelé dans le thread de lecture à chaque mesure valide
-        # is_recording() : l'enregistrement dans output_dir n'a lieu que tant qu'il renvoie True
+    def __init__(self, output_dir=DEFAULT_OUTPUT_DIR, on_sample=None,
+                 is_recording=lambda: True, send_date=None):
         self.on_sample = on_sample
         self.is_recording = is_recording
-        sys.setswitchinterval(GIL_SWITCH_INTERVAL)
-        self.port = port
-        self.baudrate = baudrate
-        self.serial_conn = None
-        self.is_running = False
-        self.thread = None
-        self.freq_meter = RateMeter()
-        self.connection_lost = False
-        self.error = ""
+        self.send_date = send_date
         self.recorder = CSVRecorder(output_dir)
-        self._last_date_sent = -DATE_RESEND_DELAY
+        self._frames = queue.SimpleQueue()
+        self._stop_frame = object()
+        self._thread = None
 
     def start(self):
-        """Ouvre le port et lance la lecture. Retourne True si la connexion a réussi."""
-        try:
-            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=SERIAL_TIMEOUT)
-        except Exception as e:
-            print(f"[!] Erreur de connexion série : {e}")
-            return False
-        self.is_running = True
-        self._send_date()
-        self.thread = threading.Thread(target=self._read_loop, daemon=True)
-        self.thread.start()
-        print(f"[*] Connecté au port {self.port}")
-        return True
-
-    def get_frequency(self):
-        """Fréquence de réception (Hz), moyenne par période de 1 s."""
-        return self.freq_meter.stable_rate()
-
-    def _read_loop(self):
-        # Lecture par blocs : readline() de pyserial lit octet par octet, soit ~18 reprises du GIL par message,
-        # chacune pouvant attendre le thread 3D et retarder l'horodatage.
-        buffer = bytearray()
-        erreurs = 0
-        while self.is_running:
-            try:
-                chunk = self.serial_conn.read(max(1, self.serial_conn.in_waiting))
-                erreurs = 0
-            except Exception as e:
-                # Erreur passagère tolérée ; si elle persiste, le port est considéré perdu (carte débranchée/reset)
-                erreurs += 1
-                if erreurs >= MAX_CONSECUTIVE_ERRORS:
-                    self.connection_lost = True
-                    self.error = str(e)
-                    return
-                time.sleep(ERROR_RETRY_DELAY)
-                continue
-            if not chunk:
-                continue
-            buffer += chunk
-            *lignes, buffer = buffer.split(b'\n')
-            buffer = bytearray(buffer)
-            for ligne in lignes:
-                try:
-                    valeurs = ligne.decode('utf-8').strip().split(',')
-                    if len(valeurs) != 7:
-                        continue
-                    mesures = tuple(map(float, valeurs[1:]))
-                except ValueError:
-                    continue
-                self.freq_meter.tick()
-                if valeurs[0].startswith(DEFAULT_YEAR):
-                    self._send_date()  # carte non synchronisée (ex. reset)
-                elif self.is_recording():
-                    self.recorder.write(valeurs[0], mesures)
-                else:
-                    self.recorder.close()  # En pause : fichier fermé, un nouveau sera créé à la reprise
-                if self.on_sample is not None:
-                    self.on_sample(valeurs[0], mesures[:3], mesures[3:])
-
-    def _send_date(self):
-        now = time.monotonic()
-        if now - self._last_date_sent < DATE_RESEND_DELAY:
+        if self._thread is not None and self._thread.is_alive():
             return
-        self._last_date_sent = now
-        try:
-            self.serial_conn.write(datetime.now().strftime("date:%Y%m%d%H%M%S\n").encode())
-        except Exception:
-            pass
+        self._thread = threading.Thread(target=self._process_frames, daemon=True)
+        self._thread.start()
+
+    def submit_frame(self, frame):
+        """Reçoit une trame brute copiée par le lecteur série."""
+        self._frames.put(bytes(frame))
+
+    def _process_frames(self):
+        while True:
+            ligne = self._frames.get()
+            if ligne is self._stop_frame:
+                return
+            try:
+                valeurs = ligne.decode('utf-8').strip().split(',')
+                if len(valeurs) != 7:
+                    continue
+                mesures = tuple(map(float, valeurs[1:]))
+            except (UnicodeDecodeError, ValueError):
+                continue
+            if valeurs[0].startswith(DEFAULT_YEAR):
+                if self.send_date is not None:
+                    self.send_date()
+            elif self.is_recording():
+                self.recorder.write(valeurs[0], mesures)
+            else:
+                self.recorder.close()
+            if self.on_sample is not None:
+                self.on_sample(valeurs[0], mesures[:3], mesures[3:])
 
     def stop(self):
-        self.is_running = False
-        if self.serial_conn and self.serial_conn.is_open:
-            self.serial_conn.close()
+        if self._thread is not None:
+            self._frames.put(self._stop_frame)
+            self._thread.join()
         self.recorder.close()
