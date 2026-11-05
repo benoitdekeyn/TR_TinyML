@@ -56,6 +56,7 @@ class RealtimeGraphs:
         self._lock = threading.Lock()
         self._samples = deque()  # (t, segment, ax, ay, az, gx, gy, gz) avec gyro en rad/s
         self._last_refresh = 0.0
+        self._frozen_drawn = None  # Image figée déjà dessinée : (instant de pause, largeur)
         self.window_s = DEFAULT_WINDOW_S
         self.paused = False
         self._paused_at = 0.0    # Instant du gel de l'affichage
@@ -200,6 +201,11 @@ class RealtimeGraphs:
             return
         self._last_refresh = now
         window = self.window_s
+        # En pause l'image ne change pas : ne pas la redessiner préserve le curseur de survol des graphes
+        frozen_key = (self._paused_at, window) if self.paused else None
+        if frozen_key is not None and frozen_key == self._frozen_drawn:
+            return
+        self._frozen_drawn = frozen_key
         with self._lock:
             ref = self._paused_at if self.paused else now
             samples = [s for s in self._samples if 0 <= ref - s[0] <= window]
