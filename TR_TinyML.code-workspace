@@ -8,5 +8,7 @@
 			"path": "Code_Nano_33_BLE_IMU"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"powershell.cwd": "TR_TinyML"
+	}
 }
