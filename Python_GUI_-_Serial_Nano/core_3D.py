@@ -1,5 +1,8 @@
 from vpython import canvas, arrow, vector, color, curve, label, box, menu, winput, button, wtext
 import time
+from html import escape
+
+from core_html import render_template, widget_slot
 
 FREQ_REFRESH_S = 1.0 # Mise à jour de l'affichage des fréquences, une fois par seconde
 
@@ -57,11 +60,8 @@ class IMUVisualizer3D:
         self._last_freq_update = 0.0
         self._last_shown = None
 
-        # 1. Un canevas de 1 px porte la connexion série (affichée en tout premier de la page, voir l'ordre CSS) ;
-        # il est créé avant la scène pour que celle-ci reste le canevas courant des objets 3D.
-        self.conn = canvas(width=WINDOW_WIDTH-30, height=1, background=BG_COLOR)
-
-        # 2. Création du canevas 3D en résolution native
+        # Les widgets de connexion vivent dans le canevas du haut (créé par CoreInterface, voir slots()) ;
+        # la scène doit rester le dernier canevas créé pour être le canevas courant des objets 3D.
         self.scene = canvas(
             width=WINDOW_WIDTH-30,
             height=WINDOW_HEIGHT-(int)(580*FONT_SIZE/25),
@@ -79,55 +79,38 @@ class IMUVisualizer3D:
 
         self.mode = 'objet'
 
-        # 3. Injection sécurisée du HTML et CSS a posteriori (sans JS perturbateur)
-        # Ordre de la page : connexion (-3), en-tête + graphes (-2, -1, voir core_graphe), puis infos 3D et scène
-        self.conn.append_to_title(
-            f"<style> select, input, button {{ font-size: {FONT_SIZE}px; height: {CONTROL_HEIGHT}px; "
-            f"box-sizing: border-box; padding: 0 {FONT_SIZE // 2}px; vertical-align: middle; font-family: sans-serif; }} "
-            f"select, button {{ cursor: pointer; }} button:disabled, select:disabled {{ cursor: not-allowed; }} "
-            f"#glowscript > div:has(.imu-conn) {{ order: -3; }} </style>"
-            f"<div class='imu-conn'></div>"
-        )
-
-        # Écran d'accueil : choix du port COM (layout identique avant/après connexion)
-        font = f'style="font-size: {FONT_SIZE}px; font-family: sans-serif;"'
-        self.conn.append_to_title(f'<span {font}><b>Port série : COM</b></span>')
-        self.com_input = winput(
-            bind=self._on_com_enter, type='numeric', width=int(FONT_SIZE * 3), text=str(default_com),
-            pos=self.conn.title_anchor
-        )
-        self.conn.append_to_title('&nbsp;')
-        self.btn_connect = button(text='Tester la connexion', bind=self._on_test_click, pos=self.conn.title_anchor)
-        self.conn.append_to_title('&nbsp;')
-        self.btn_disconnect = button(text='Déconnecter', bind=self._on_disconnect_click, pos=self.conn.title_anchor)
-        self.btn_disconnect.disabled = True
-        self.conn.append_to_title('&nbsp;&nbsp;')
-        self.status = wtext(text=f'<span {font}>En attente de connexion...</span>', pos=self.conn.title_anchor)
-        self.conn.append_to_title('<br>')
-
-        self.conn.append_to_title(f'<span {font}><b>Réception série : </b></span>')
-        self.freq_text = wtext(text=f'<span {font}>-- Hz</span>', pos=self.conn.title_anchor)
-        self.conn.append_to_title('<br><br>')
-
-        self.scene.append_to_title(f'<span {font}><b>Affichage 3D : </b></span>')
-        self.fps_text = wtext(text=f'<span {font}>-- FPS</span>', pos=self.scene.title_anchor)
-        self.scene.append_to_title('<br>')
-
-        self.scene.append_to_title(f'<span {font}><b>Mode d\'affichage : </b></span>')
-        self.mode_menu = menu(
-            choices=['Carte 3D (Gravité fixe)', 'Vecteur Gravité (IMU fixe)'],
-            bind=self._on_mode_change,
-            pos=self.scene.title_anchor
-        )
+        self._default_com = str(default_com)
+        render_template(self.scene, "scene_panel.html", {
+            "fps": widget_slot(self, "fps_text", lambda pos: wtext(text=self._pill("-- FPS"), pos=pos)),
+            "mode_menu": widget_slot(self, "mode_menu", lambda pos: menu(
+                choices=['Carte 3D (Gravité fixe)', 'Vecteur Gravité (IMU fixe)'],
+                bind=self._on_mode_change, pos=pos)),
+        })
         self.mode_menu.disabled = True
-        self.scene.append_to_title(
-            f"<p style='color:#555; font-size: {FONT_SIZE}px; margin: 10px 0 15px 0; font-family: sans-serif;'>"
-            f"• <b>Orbite :</b> Clic droit + glisser<br>"
-            f"• <b>Déplacer (Pan) :</b> Shift + Clic gauche + glisser<br>"
-            f"• <b>Zoom :</b> Molette souris</p>"
-        )
 
         self._create_scene_objects()
+
+    @staticmethod
+    def _pill(text):
+        return f"<span class='imu-pill'>{escape(text)}</span>"
+
+    def slots(self):
+        """Widgets de connexion, à insérer dans le gabarit du haut de page (top_panel.html)."""
+        def disabled_button(position):
+            self.btn_disconnect = button(text='Déconnecter', bind=self._on_disconnect_click, pos=position)
+            self.btn_disconnect.disabled = True
+
+        return {
+            "com_input": widget_slot(self, "com_input", lambda pos: winput(
+                bind=self._on_com_enter, type='numeric', width=int(FONT_SIZE * 3),
+                text=self._default_com, pos=pos)),
+            "connect": widget_slot(self, "btn_connect", lambda pos: button(
+                text='Tester la connexion', bind=self._on_test_click, pos=pos)),
+            "disconnect": disabled_button,
+            "status": widget_slot(self, "status", lambda pos: wtext(
+                text="<span>En attente de connexion...</span>", pos=pos)),
+            "imu_rate": widget_slot(self, "freq_text", lambda pos: wtext(text=self._pill("-- Hz"), pos=pos)),
+        }
 
     def _on_com_enter(self, w):
         self._try_connect()
@@ -136,8 +119,8 @@ class IMUVisualizer3D:
         self._try_connect()
 
     def _set_status(self, message, ok):
-        couleur = '#080' if ok else '#c00'
-        self.status.text = f'<span style="font-size: {FONT_SIZE}px; font-family: sans-serif; color:{couleur};">{message}</span>'
+        state = 'imu-status-ok' if ok else 'imu-status-error'
+        self.status.text = f"<span class='{state}'>{escape(message)}</span>"
 
     def _try_connect(self):
         if self.connected:
@@ -177,9 +160,8 @@ class IMUVisualizer3D:
         self.btn_disconnect.disabled = True
         self.mode_menu.disabled = True
         self._hide_scene_objects()
-        style = f'style="font-size: {FONT_SIZE}px; font-family: sans-serif;"'
-        self.freq_text.text = f'<span {style}>-- Hz</span>'
-        self.fps_text.text = f'<span {style}>-- FPS</span>'
+        self.freq_text.text = self._pill("-- Hz")
+        self.fps_text.text = self._pill("-- FPS")
         self._last_shown = None
         self._set_status(message, ok)
 
@@ -272,13 +254,12 @@ class IMUVisualizer3D:
         if not self.connected or now - self._last_freq_update < FREQ_REFRESH_S:
             return
         self._last_freq_update = now
-        style = f'style="font-size: {FONT_SIZE}px; font-family: sans-serif;"'
         hz, fps = round(hz_serie, 1), round(fps_3d)
         if (hz, fps) == self._last_shown:
             return
         self._last_shown = (hz, fps)
-        self.freq_text.text = f'<span {style}>{hz} Hz</span>'
-        self.fps_text.text = f'<span {style}>{fps} FPS</span>'
+        self.freq_text.text = self._pill(f"{hz:.1f} Hz")
+        self.fps_text.text = self._pill(f"{fps} FPS")
 
     def update_pose(self, pose):
         """Affiche une Pose du filtre (core_filtre.Pose) : aucune estimation ici, seulement du rendu."""

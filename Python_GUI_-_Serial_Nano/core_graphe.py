@@ -5,9 +5,10 @@ from datetime import datetime
 import time
 from collections import deque
 
-from vpython import graph, gcurve, color, winput, canvas, button, checkbox
+from vpython import graph, gcurve, color, winput, button, checkbox
 
-from core_3D import WINDOW_WIDTH, FONT_SIZE, CONTROL_HEIGHT
+from core_3D import WINDOW_WIDTH, FONT_SIZE
+from core_html import widget_slot
 from core_CSV import CSVRecorder, DEFAULT_OUTPUT_DIR
 
 # --- DESIGN DES GRAPHES ---
@@ -26,10 +27,7 @@ CURVE_COLORS = {"ax": color.yellow, "ay": color.magenta, "az": color.cyan,
 ACCEL_CHANNELS = ("ax", "ay", "az")
 GYRO_CHANNELS = ("gx", "gy", "gz")
 
-# --- EN-TÊTE (titre + réglage de la durée) ---
-HEADER_TITLE_SIZE = FONT_SIZE + 8
-HEADER_BG_COLOR = color.gray(0.1)  # Fond du mini-canevas qui porte l'en-tête
-WINDOW_LABEL = "Largeur des graphes (s) : "
+# --- LIBELLÉS DYNAMIQUES DES BOUTONS (le reste du texte est dans interface_web/top_panel.html) ---
 PLAY_TEXT = "▶ Play"       # Affiché en pause
 PAUSE_TEXT = "⏸ Pause"     # Affiché en lecture
 REC_START_TEXT = "⏺ Start"
@@ -51,11 +49,10 @@ REFRESH_HZ = 15                  # Cadence de redessin (indépendante de la cade
 
 
 class RealtimeGraphs:
-    """En-tête (titre + durée), puis deux graphes superposés (accélération en g, gyroscope en rad/s),
-    axe vertical symétrique zoomé en continu sur l'amplitude mesurée.
-    À créer AVANT la vue 3D : l'ordre de création est l'ordre dans la page."""
+    """Deux graphes superposés (accélération en g, gyroscope en rad/s), axe vertical symétrique
+    zoomé en continu sur l'amplitude mesurée. Ses contrôles sont exposés par slots()."""
 
-    def __init__(self, titre=""):
+    def __init__(self):
         self._lock = threading.Lock()
         self._samples = deque()  # (t, segment, ax, ay, az, gx, gy, gz) avec gyro en rad/s
         self._last_refresh = 0.0
@@ -67,45 +64,29 @@ class RealtimeGraphs:
         self._rec_paused = False
         self._monitor_csv = None
         self._session = None
+        self.on_pause_change = None
 
-        self._create_header(titre)
         self._graph_accel, self._curves_accel, self._names_accel = self._make_graph(ACCEL_TITLE, ACCEL_CHANNELS)
         self._graph_gyro, self._curves_gyro, self._names_gyro = self._make_graph(GYRO_TITLE, GYRO_CHANNELS)
 
-    def _create_header(self, titre):
-        # Un canevas de 1 px sert uniquement d'ancre : son titre accueille le texte et la textbox
-        header = canvas(width=GRAPH_WIDTH, height=1, background=HEADER_BG_COLOR)
-        font = f'style="font-size: {FONT_SIZE}px; font-family: sans-serif;"'
-        # Vpython ajoute les graphes à la fin de la page, après les canevas : le CSS flex (propriété order)
-        # remet l'en-tête en premier, puis les graphes, puis le reste (contrôles et vue 3D) dans l'ordre de création.
-        header.append_to_title(
-            f"<style> input {{ font-size: {FONT_SIZE}px; height: {CONTROL_HEIGHT}px; box-sizing: border-box; }} "
-            f"#glowscript {{ display: flex; flex-direction: column; align-items: flex-start; }} "
-            f"#glowscript > div:has(.imu-header) {{ order: -2; }} "
-            f".glowscript-graph {{ order: -1; }} </style>"
-            f"<div class='imu-header'>"
-            f"<h2 style='font-size: {HEADER_TITLE_SIZE}px; margin-bottom: 5px; font-family: sans-serif;'>{titre}</h2>"
-            f"</div><span {font}><b>{WINDOW_LABEL}</b></span>"
-        )
-        # Ligne 1 : durée des graphes (champ en fin de ligne, après son libellé)
-        self.window_input = winput(
-            bind=self._on_window_enter, type='numeric', width=int(FONT_SIZE * 3),
-            text=f"{self.window_s:g}", pos=header.title_anchor,
-        )
-        header.append_to_title("<br>")
-        # Ligne 2 : affichage en continu
-        header.append_to_title(f"<br><span {font}><b>Lecture IMU : </b></span>")
-        self.btn_pause = button(text=PAUSE_TEXT, bind=self._on_pause_click, pos=header.title_anchor)
-        header.append_to_title("<br><br>")
-        # Ligne 3 : enregistrement
-        header.append_to_title(f"<span {font}><b>Enregistrement : </b></span>")
-        self.btn_rec = button(text=REC_START_TEXT, bind=self._on_rec_click, pos=header.title_anchor)
-        header.append_to_title("&nbsp;&nbsp;&nbsp;")
-        self.btn_rec_pause = button(text=REC_PAUSE_TEXT, bind=self._on_rec_pause_click, pos=header.title_anchor)
-        self.btn_rec_pause.disabled = True
-        header.append_to_title("&nbsp;&nbsp;&nbsp;&nbsp;")
-        self.chk_sync = checkbox(text=SYNC_LABEL, bind=lambda c: None, pos=header.title_anchor, checked=False)
-        header.append_to_title("<br><br>")
+    def slots(self):
+        """Contrôles des graphes, à insérer dans le gabarit du haut de page (top_panel.html)."""
+        def rec_pause_button(position):
+            self.btn_rec_pause = button(text=REC_PAUSE_TEXT, bind=self._on_rec_pause_click, pos=position)
+            self.btn_rec_pause.disabled = True
+
+        return {
+            "window": widget_slot(self, "window_input", lambda pos: winput(
+                bind=self._on_window_enter, type='numeric', width=int(FONT_SIZE * 3),
+                text=f"{self.window_s:g}", pos=pos)),
+            "pause": widget_slot(self, "btn_pause", lambda pos: button(
+                text=PAUSE_TEXT, bind=self._on_pause_click, pos=pos)),
+            "rec": widget_slot(self, "btn_rec", lambda pos: button(
+                text=REC_START_TEXT, bind=self._on_rec_click, pos=pos)),
+            "rec_pause": rec_pause_button,
+            "sync": widget_slot(self, "chk_sync", lambda pos: checkbox(
+                text=SYNC_LABEL, bind=lambda c: None, pos=pos, checked=False)),
+        }
 
     def _make_graph(self, title, channels):
         g = graph(
@@ -164,6 +145,8 @@ class RealtimeGraphs:
                     self._open_part()
         self.btn_pause.text = PLAY_TEXT if paused else PAUSE_TEXT
         self._last_refresh = 0.0
+        if self.on_pause_change is not None:
+            self.on_pause_change(paused)
 
     def _on_rec_click(self, b):
         with self._lock:

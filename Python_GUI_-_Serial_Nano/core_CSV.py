@@ -21,13 +21,16 @@ class CSVRecorder:
     Un fichier de moins de min_rows mesures est supprimé à la fermeture."""
 
     def __init__(self, output_dir=DEFAULT_OUTPUT_DIR, prefix="", split_by_minute=True,
-                 suffix_format="({})", min_rows=MIN_ROWS, name=None):
+                 suffix_format="({})", min_rows=MIN_ROWS, name=None, header=None):
         self.name = name  # Nom de fichier imposé (sinon dérivé de l'horodatage)
         self.output_dir = output_dir
         self.prefix = prefix
         self.split_by_minute = split_by_minute
         self.suffix_format = suffix_format
         self.min_rows = min_rows
+        self.header = tuple(header) if header is not None else tuple(HEADER)
+        if not self.header or self.header[0] != "timestamp":
+            raise ValueError("L'en-tête CSV doit commencer par 'timestamp'.")
         self._minute = None
         self._file = None
         self._writer = None
@@ -52,17 +55,21 @@ class CSVRecorder:
         return path
 
     def write(self, timestamp, values):
-        """timestamp : 'YYYY-MM-DD HH:MM:SS.mmm' ; values : 6 flottants."""
+        """Écrit un timestamp et les valeurs correspondant aux colonnes de l'en-tête."""
         # Une ligne série tronquée (caractères perdus) ne doit pas créer un faux fichier
         if not TIMESTAMP_RE.match(timestamp):
             return
+        if len(values) != len(self.header) - 1:
+            raise ValueError(
+                f"{len(self.header) - 1} valeurs attendues après le timestamp, {len(values)} reçues."
+            )
         minute = timestamp[:16]
         if self._file is None or (self.split_by_minute and minute != self._minute):
             self.close()
             self._path = self._unique_path(self._file_name(timestamp))
             self._file = open(self._path, "w", newline="")
             self._writer = csv.writer(self._file)
-            self._writer.writerow(HEADER)
+            self._writer.writerow(self.header)
             self._minute = minute
         self._writer.writerow([timestamp, *values])
         self._rows += 1

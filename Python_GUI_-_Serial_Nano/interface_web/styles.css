@@ -1,0 +1,179 @@
+:root {
+    --ui-font: {{FONT_SIZE}}px;
+    --ui-control-height: {{CONTROL_HEIGHT}}px;
+    --ui-padding: {{FONT_PADDING}}px;
+    --ui-width: {{PAGE_WIDTH}}px;
+    --color-text: #1f2933;
+    --color-muted: #66727f;
+    --color-line: #d5dbe1;
+    --color-card: #eef1f4;
+    --color-ok: #17803d;
+    --color-error: #c62828;
+    --color-moving: #c62828;
+}
+
+/* Ordre de la page : haut de page (connexion, features, contrôles), graphes, puis vue 3D. */
+#glowscript {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+#glowscript > div:has(> .imu-top) {
+    order: -50;
+    padding-bottom: 6px;
+}
+
+.glowscript-graph {
+    order: -20;
+}
+
+/* Les titres de canevas deviennent des lignes flex : les libellés et les widgets VPython s'y alignent. */
+#glowscript > div:has(> .imu-top),
+#glowscript > div:has(> .imu-scene) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    width: var(--ui-width);
+    box-sizing: border-box;
+    white-space: normal;
+    font-family: sans-serif;
+    font-size: var(--ui-font);
+    color: var(--color-text);
+}
+
+.imu-top,
+.imu-scene {
+    display: none;
+}
+
+.imu-title {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: calc(var(--ui-font) * 1.3);
+}
+
+.imu-label {
+    font-weight: 600;
+}
+
+.imu-gap {
+    margin-left: 20px;
+}
+
+.imu-grow {
+    flex: 1 1 0;
+}
+
+.imu-sep {
+    flex-basis: 100%;
+    height: 0;
+    margin: 2px 0;
+    border: 0;
+    border-top: 1px solid var(--color-line);
+}
+
+/* Contrôles VPython (button, menu, winput) */
+select,
+input,
+button {
+    font-size: var(--ui-font);
+    height: var(--ui-control-height);
+    box-sizing: border-box;
+    padding: 0 var(--ui-padding);
+    vertical-align: middle;
+    font-family: sans-serif;
+}
+
+select,
+button {
+    cursor: pointer;
+}
+
+button:disabled,
+select:disabled {
+    cursor: not-allowed;
+}
+
+/* Valeurs affichées par des wtext */
+.imu-pill {
+    display: inline-block;
+    padding: 2px 12px;
+    background: var(--color-card);
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+}
+
+.imu-status-ok {
+    color: var(--color-ok);
+}
+
+.imu-status-error {
+    color: var(--color-error);
+}
+
+.imu-help {
+    flex-basis: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 24px;
+    color: var(--color-muted);
+    font-size: calc(var(--ui-font) * 0.75);
+}
+
+/* Panneau des features : une seule ligne de valeurs */
+#glowscript > div > span:has(> .imu-features) {
+    flex: 1 1 100%;
+}
+
+.imu-features {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px 10px;
+    font-size: calc(var(--ui-font) * 0.8);
+}
+
+.imu-features-title {
+    align-self: center;
+    margin-right: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-muted);
+}
+
+.imu-metric {
+    flex: 1 1 0;
+    min-width: 120px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 12px;
+    background: var(--color-card);
+    border-radius: 6px;
+}
+
+.imu-metric-label {
+    color: var(--color-muted);
+}
+
+.imu-metric-value {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.imu-movement.imu-moving {
+    background: var(--color-moving);
+    color: #fff;
+}
+
+.imu-movement.imu-moving .imu-metric-label {
+    color: #fff;
+}
+
+.imu-movement.imu-still .imu-metric-value {
+    color: var(--color-ok);
+}

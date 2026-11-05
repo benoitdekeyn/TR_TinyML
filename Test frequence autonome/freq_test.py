@@ -65,7 +65,7 @@ def main():
             frames = 0
             invalid = 0
             for line in lines:
-                if len(line) <= MAX_FRAME_SIZE and line.count(b',') == 6:
+                if len(line) <= MAX_FRAME_SIZE and line.startswith(b"IMU") and line.count(b',') == 6:
                     frames += 1
                 else:
                     invalid += 1
